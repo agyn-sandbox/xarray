@@ -1,0 +1,44 @@
+TESTS
+
+Purpose: document and validate local test execution for this repository.
+
+Prerequisites
+- Python >= 3.11
+- pip
+- Recommended dependencies for running the full suite:
+  - pytest, pytest-cov, pytest-env, pytest-timeout, pytest-xdist, pytest-asyncio
+  - hypothesis
+  - pytest-mypy-plugins (for type annotation tests)
+  - mypy (the project currently pins mypy==1.18.1 in its dev group)
+
+Setup
+- Install the package in editable mode:
+  - pip install -e .
+- Install test dependencies (examples):
+  - pip install pytest pytest-cov pytest-env pytest-timeout pytest-xdist pytest-asyncio hypothesis
+  - pip install pytest-mypy-plugins mypy==1.18.1
+
+Run tests
+- Run the test suite in parallel:
+  - python -m pytest -nauto
+- Skip selected markers (examples):
+  - Skip network and flaky tests: python -m pytest -nauto -m "not network and not flaky"
+  - By default, tests marked with @network are skipped unless --run-network-tests is provided.
+  - Tests marked flaky are skipped unless --run-flaky is provided.
+- Coverage:
+  - python -m pytest -nauto --cov=xarray --cov-report=xml
+
+Type annotation tests
+- Type tests are driven by pytest-mypy-plugins with test cases in YAML files (see xarray/tests/*_typing.yml).
+- Ensure pytest-mypy-plugins and mypy are installed (see Setup above).
+- To run only type tests:
+  - python -m pytest -m mypy --run-mypy
+- Notes:
+  - Some mypy notes without line numbers are known limitations and are skipped in certain YAML cases.
+
+Troubleshooting
+- Missing plugins or tools (e.g., pytest-mypy-plugins, mypy): install the dependencies listed above.
+- Long runtimes or memory issues: run with -nauto to let pytest-xdist choose concurrency, or limit to a subset (e.g., tests/xarray/core).
+- Network-dependent tests: run with --run-network-tests when internet access is available; otherwise skip with -m "not network".
+- Flaky tests: enable explicitly with --run-flaky or skip with -m "not flaky".
+- Slow hypothesis tests under properties/: enable with --run-slow-hypothesis or they are skipped by default.
