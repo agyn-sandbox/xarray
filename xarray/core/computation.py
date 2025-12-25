@@ -1841,7 +1841,7 @@ def where(cond, x, y, *, keep_attrs: bool = None):
             for name in result.data_vars:
                 try:
                     source_var = source_data_vars[name]
-                except (KeyError, TypeError):
+                except KeyError:
                     source_var = None
                 if source_var is not None:
                     result[name].attrs = dict(getattr(source_var, "attrs", {}))
