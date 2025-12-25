@@ -1679,6 +1679,71 @@ class TestNetCDF4ViaDaskData(TestNetCDF4Data):
 
 
 @requires_zarr
+@requires_fsspec
+def test_open_zarr_chunks_metadata_only(monkeypatch) -> None:
+    from collections.abc import MutableMapping
+
+    from fsspec.implementations.memory import MemoryFileSystem
+
+    from xarray.core.variable import Variable
+
+    class RecordingStore(MutableMapping[str, bytes]):
+        METADATA_SUFFIXES = (".zarray", ".zattrs", ".zgroup", ".zmetadata")
+
+        def __init__(self, store: MutableMapping[str, bytes]) -> None:
+            self._store = store
+            self.data_reads: list[str] = []
+
+        def _is_data_chunk(self, key: str) -> bool:
+            suffix = key.rsplit("/", 1)[-1]
+            if suffix.startswith("."):
+                return False
+            return not key.endswith(self.METADATA_SUFFIXES)
+
+        def __getitem__(self, key: str) -> bytes:
+            value = self._store[key]
+            if self._is_data_chunk(key):
+                self.data_reads.append(key)
+            return value
+
+        def __setitem__(self, key: str, value: bytes) -> None:
+            self._store[key] = value
+
+        def __delitem__(self, key: str) -> None:
+            del self._store[key]
+
+        def __iter__(self):
+            return iter(self._store)
+
+        def __len__(self) -> int:
+            return len(self._store)
+
+    fs = MemoryFileSystem()
+    mapper = fs.get_mapper("materialization.zarr")
+
+    source = xr.Dataset({"foo": ("x", np.arange(10, dtype=np.int64))}).chunk({"x": 4})
+    source.to_zarr(mapper, mode="w")
+
+    store = RecordingStore(mapper)
+    ds = xr.open_zarr(store, chunks=None)
+
+    with monkeypatch.context() as m:
+        def _forbidden(self) -> None:
+            raise AssertionError("Variable.values accessed while reading chunks")
+
+        m.setattr(Variable, "values", property(_forbidden), raising=True)
+        chunks = ds.chunks
+        chunksizes = ds.chunksizes
+        var_chunksizes = ds["foo"].variable.chunksizes
+
+    expected = {"x": (4, 4, 2)}
+    assert dict(chunks) == expected
+    assert dict(chunksizes) == expected
+    assert dict(var_chunksizes) == expected
+    assert store.data_reads == []
+
+
+@requires_zarr
 class ZarrBase(CFEncodedBase):
 
     DIMENSION_KEY = "_ARRAY_DIMENSIONS"

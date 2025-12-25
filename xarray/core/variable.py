@@ -1001,9 +1001,8 @@ class Variable(AbstractArray, NdimSizeLenMixin, VariableArithmetic):
     @property
     def chunksizes(self) -> Mapping[Any, tuple[int, ...]]:
         """
-        Mapping from dimension names to block lengths for this variable's data, or None if
-        the underlying data is not a dask array.
-        Cannot be modified directly, but can be modified by calling .chunk().
+        Mapping from dimension names to block lengths for this variable's data.
+        Returns an empty mapping if chunking information is unavailable.
 
         Differs from variable.chunks because it returns a mapping of dimensions to chunk shapes
         instead of a tuple of chunk shapes.
@@ -1014,10 +1013,68 @@ class Variable(AbstractArray, NdimSizeLenMixin, VariableArithmetic):
         Variable.chunks
         xarray.unify_chunks
         """
-        if hasattr(self._data, "chunks"):
-            return Frozen({dim: c for dim, c in zip(self.dims, self.data.chunks)})
-        else:
-            return {}
+        def _normalize_chunks(item: Any, size: int) -> tuple[int, ...]:
+            if isinstance(item, tuple):
+                return tuple(int(x) for x in item)
+            if isinstance(item, list):
+                return tuple(int(x) for x in item)
+            if isinstance(item, numbers.Number):
+                chunk = int(item)
+                if chunk <= 0:
+                    return ()
+                full_chunks, remainder = divmod(size, chunk)
+                chunks = (chunk,) * full_chunks
+                if remainder:
+                    chunks += (remainder,)
+                if not chunks:
+                    chunks = (size,)
+                return chunks
+            return ()
+
+        def _from_mapping(mapping: Mapping[Any, Any]) -> dict[Any, tuple[int, ...]]:
+            result: dict[Any, tuple[int, ...]] = {}
+            for dim, size in zip(self.dims, self.shape):
+                if dim in mapping and mapping[dim] is not None:
+                    normalized = _normalize_chunks(mapping[dim], size)
+                    if normalized:
+                        result[dim] = normalized
+            return result
+
+        data_chunks = getattr(self._data, "chunks", None)
+        if data_chunks is not None:
+            if data_chunks and isinstance(data_chunks[0], (list, tuple)):
+                return Frozen(
+                    {
+                        dim: tuple(int(x) for x in chunk_tuple)
+                        for dim, chunk_tuple in zip(self.dims, data_chunks)
+                    }
+                )
+
+            normalized_chunks: dict[Any, tuple[int, ...]] = {}
+            for dim, size, chunk_item in zip(self.dims, self.shape, data_chunks):
+                normalized = _normalize_chunks(chunk_item, size)
+                if normalized:
+                    normalized_chunks[dim] = normalized
+            if normalized_chunks:
+                return Frozen(normalized_chunks)
+
+        encoding_chunks: dict[Any, tuple[int, ...]] = {}
+        preferred = self.encoding.get("preferred_chunks")
+        if utils.is_dict_like(preferred):
+            encoding_chunks.update(_from_mapping(preferred))
+
+        for key in ("chunks", "chunksizes"):
+            raw = self.encoding.get(key)
+            if not raw:
+                continue
+            if utils.is_dict_like(raw):
+                mapping = raw
+            else:
+                mapping = {dim: value for dim, value in zip(self.dims, raw)}
+            for dim, chunk_tuple in _from_mapping(mapping).items():
+                encoding_chunks.setdefault(dim, chunk_tuple)
+
+        return Frozen(encoding_chunks)
 
     _array_counter = itertools.count()
 

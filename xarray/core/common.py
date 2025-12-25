@@ -2023,14 +2023,13 @@ def get_chunksizes(
 
     chunks: dict[Any, tuple[int, ...]] = {}
     for v in variables:
-        if hasattr(v.data, "chunks"):
-            for dim, c in v.chunksizes.items():
-                if dim in chunks and c != chunks[dim]:
-                    raise ValueError(
-                        f"Object has inconsistent chunks along dimension {dim}. "
-                        "This can be fixed by calling unify_chunks()."
-                    )
-                chunks[dim] = c
+        for dim, c in v.chunksizes.items():
+            if dim in chunks and c != chunks[dim]:
+                raise ValueError(
+                    f"Object has inconsistent chunks along dimension {dim}. "
+                    "This can be fixed by calling unify_chunks()."
+                )
+            chunks[dim] = c
     return Frozen(chunks)
 
 
