@@ -2784,7 +2784,7 @@ class Dataset(Mapping, ImplementsDatasetReduce, DataWithCoords):
                             raise IndexError(
                                 "Axis {a} is out of bounds of the expanded"
                                 " dimension size {dim}.".format(
-                                    a=a, v=k, dim=result_ndim
+                                    a=a, dim=result_ndim
                                 )
                             )
 
@@ -4768,7 +4768,10 @@ class Dataset(Mapping, ImplementsDatasetReduce, DataWithCoords):
                             # the former is often more efficient
                             reduce_dims = None
                         variables[name] = var.quantile(
-                            q, dim=reduce_dims, interpolation=interpolation
+                            q,
+                            dim=reduce_dims,
+                            interpolation=interpolation,
+                            keep_attrs=keep_attrs,
                         )
 
             else:

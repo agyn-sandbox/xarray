@@ -1488,6 +1488,28 @@ class TestVariable(VariableSubclassobjects):
                 expected = np.nanpercentile(self.d, np.array(q) * 100, axis=axis)
                 np.testing.assert_allclose(actual.values, expected)
 
+    def test_quantile_keep_attrs_true(self):
+        v = Variable(["x"], [0.0, 1.0, 2.0], attrs={"units": "m"})
+
+        result = v.quantile(0.5, keep_attrs=True)
+
+        assert result.attrs == v.attrs
+
+    def test_quantile_keep_attrs_false(self):
+        v = Variable(["x"], [0.0, 1.0, 2.0], attrs={"units": "m"})
+
+        result = v.quantile(0.5, keep_attrs=False)
+
+        assert result.attrs == {}
+
+    def test_quantile_keep_attrs_from_options(self):
+        v = Variable(["x"], [0.0, 1.0, 2.0], attrs={"units": "m"})
+
+        with set_options(keep_attrs=True):
+            result = v.quantile(0.5)
+
+        assert result.attrs == v.attrs
+
     @requires_dask
     def test_quantile_dask_raises(self):
         # regression for GH1524

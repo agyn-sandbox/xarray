@@ -2310,6 +2310,28 @@ class TestDataArray:
                 )
                 np.testing.assert_allclose(actual.values, expected)
 
+    def test_quantile_keep_attrs_true(self):
+        array = DataArray([0.0, 1.0, 2.0], dims="x", attrs={"units": "m"})
+
+        result = array.quantile(0.5, keep_attrs=True)
+
+        assert result.attrs == array.attrs
+
+    def test_quantile_keep_attrs_false(self):
+        array = DataArray([0.0, 1.0, 2.0], dims="x", attrs={"units": "m"})
+
+        result = array.quantile(0.5, keep_attrs=False)
+
+        assert result.attrs == {}
+
+    def test_quantile_keep_attrs_from_options(self):
+        array = DataArray([0.0, 1.0, 2.0], dims="x", attrs={"units": "m"})
+
+        with xr.set_options(keep_attrs=True):
+            result = array.quantile(0.5)
+
+        assert result.attrs == array.attrs
+
     def test_reduce_keep_attrs(self):
         # Test dropped attrs
         vm = self.va.mean()
