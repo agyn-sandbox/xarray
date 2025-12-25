@@ -49,6 +49,14 @@ pytestmark = [
 ]
 
 
+class HasValues:
+    values = np.array(["class-level"])
+
+    def __init__(self, token="instance"):
+        self.token = token
+        self.values = np.array([token])
+
+
 class TestDataArray:
     @pytest.fixture(autouse=True)
     def setup(self):
@@ -7077,6 +7085,60 @@ def test_subclass_slots():
             pass
 
     assert str(e.value) == "MyArray must explicitly define __slots__"
+
+
+def test_loc_assignment_custom_object_with_values_kept():
+    array = xr.DataArray(
+        np.full(3, None, dtype=object),
+        dims="x",
+        coords={"x": [0, 1, 2]},
+    )
+    value = HasValues("payload")
+
+    array.loc[{"x": 1}] = value
+
+    assert array.dtype == object
+    assert array.values[1] is value
+    assert isinstance(array.values[1], HasValues)
+    assert not isinstance(array.values[1], np.ndarray)
+
+
+def test_assignment_pandas_series_unwrapped():
+    coords = ["a", "b", "c"]
+    array = xr.DataArray(np.zeros(3), dims="x", coords={"x": coords})
+    series = pd.Series([1, 2, 3], index=coords)
+
+    array.loc[dict(x=slice(None))] = series
+
+    assert_array_equal(array.values, series.values)
+
+    dataframe = pd.DataFrame(
+        [[10, 20], [30, 40]], index=[0, 1], columns=["y0", "y1"]
+    )
+    matrix = xr.DataArray(
+        np.zeros((2, 2)),
+        dims=["x", "y"],
+        coords={"x": [0, 1], "y": ["y0", "y1"]},
+    )
+
+    matrix.loc[{"x": slice(None), "y": slice(None)}] = dataframe
+
+    assert_array_equal(matrix.values, dataframe.values)
+
+
+def test_constructor_with_custom_object_values_property():
+    instance = HasValues("scalar")
+    scalar_array = xr.DataArray(instance)
+
+    assert scalar_array.dtype == object
+    assert scalar_array.item() is instance
+    assert isinstance(scalar_array.item(), HasValues)
+    assert not isinstance(scalar_array.item(), np.ndarray)
+
+    class_array = xr.DataArray(HasValues)
+
+    assert class_array.dtype == object
+    assert class_array.item() is HasValues
 
 
 def test_weakref():
