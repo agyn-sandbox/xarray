@@ -318,3 +318,77 @@ def test_coarsen_construct(dask: bool) -> None:
 
     with pytest.raises(ValueError):
         ds.coarsen(time=12).construct(time=("bar",))
+
+
+def _build_monthly_dataset(length: int = 24) -> Dataset:
+    time = pd.date_range("2000-01-01", periods=length, freq="MS")
+    labels = np.array([f"L{i}" for i in range(length)])
+    return xr.Dataset(
+        data_vars={"a": ("time", np.arange(length))},
+        coords={
+            "time": time,
+            "label": ("time", labels, {"meta": "value"}),
+        },
+    )
+
+
+def test_coarsen_construct_preserves_nondim_coords() -> None:
+    ds = _build_monthly_dataset()
+
+    result = ds.coarsen(time=12).construct(time=("year", "month"))
+
+    assert "label" in result.coords
+    assert "label" not in result.data_vars
+    assert result["label"].dims == ("year", "month")
+    np.testing.assert_array_equal(
+        result["label"].data, ds["label"].data.reshape(2, 12)
+    )
+    assert result["label"].attrs == {"meta": "value"}
+
+
+def test_coarsen_construct_preserves_unrelated_coords() -> None:
+    ds = xr.Dataset(
+        data_vars={
+            "a": (("station", "time"), np.arange(48).reshape(2, 24)),
+        },
+        coords={
+            "time": pd.date_range("2000-01-01", periods=24, freq="MS"),
+            "station": ("station", ["s0", "s1"]),
+            "station_name": ("station", ["North", "South"]),
+        },
+    )
+
+    result = ds.coarsen(time=12).construct(time=("year", "month"))
+
+    assert "station_name" in result.coords
+    assert "station_name" not in result.data_vars
+    assert result.coords["station_name"].dims == ("station",)
+    np.testing.assert_array_equal(
+        result.coords["station_name"].data, ds.coords["station_name"].data
+    )
+
+
+def test_dataarray_coarsen_construct_preserves_nondim_coords() -> None:
+    ds = _build_monthly_dataset()
+    da = ds["a"].assign_coords(label=ds["label"])
+
+    result = da.coarsen(time=12).construct(time=("year", "month"))
+
+    assert "label" in result.coords
+    assert result.coords["label"].dims == ("year", "month")
+    np.testing.assert_array_equal(
+        result.coords["label"].data, ds["label"].data.reshape(2, 12)
+    )
+    assert result.coords["label"].attrs == {"meta": "value"}
+
+
+def test_coarsen_construct_preserves_nondim_coord_attrs() -> None:
+    ds = _build_monthly_dataset(length=12)
+
+    constructed = ds.coarsen(time=6).construct(time=("half", "month"))
+    assert constructed["label"].attrs == {"meta": "value"}
+
+    constructed_no_attrs = ds.coarsen(time=6).construct(
+        time=("half", "month"), keep_attrs=False
+    )
+    assert constructed_no_attrs["label"].attrs == {}
