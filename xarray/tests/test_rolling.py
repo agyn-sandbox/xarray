@@ -49,6 +49,37 @@ class TestDataArrayRolling:
                     expected.values[expected.values.nonzero()],
                 )
 
+    @pytest.mark.parametrize(
+        "window,min_periods",
+        ((3, None), (4, None), (4, 1)),
+    )
+    def test_rolling_iter_center_alignment(
+        self, window: int, min_periods: int | None
+    ) -> None:
+        da = xr.DataArray(
+            np.arange(8, dtype=float),
+            dims="time",
+            coords={"time": np.arange(8)},
+        )
+
+        rolling_kwargs: dict[str, Any] = {"time": window, "center": True}
+        if min_periods is not None:
+            rolling_kwargs["min_periods"] = min_periods
+
+        rolling_obj = da.rolling(**rolling_kwargs)
+        rolling_obj_mean = rolling_obj.mean()
+
+        assert len(rolling_obj.window_labels) == len(da["time"])
+        assert_identical(rolling_obj.window_labels, da["time"])
+
+        for i, (label, window_da) in enumerate(rolling_obj):
+            assert label == da["time"].isel(time=i)
+
+            expected = window_da.mean("time")
+            actual = rolling_obj_mean.isel(time=i)
+            assert_identical(actual.coords["time"], label)
+            assert_identical(actual.reset_coords(drop=True), expected)
+
     @pytest.mark.parametrize("da", (1,), indirect=True)
     def test_rolling_repr(self, da) -> None:
         rolling_obj = da.rolling(time=7)
