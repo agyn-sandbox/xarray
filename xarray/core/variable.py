@@ -3,7 +3,7 @@ import itertools
 from collections import OrderedDict, defaultdict
 from datetime import timedelta
 from distutils.version import LooseVersion
-from typing import Any, Hashable, Mapping, Union
+from typing import Any, Hashable, Mapping, Optional, Union
 
 import numpy as np
 import pandas as pd
@@ -1592,7 +1592,13 @@ class Variable(
         """
         return self.broadcast_equals(other, equiv=duck_array_ops.array_notnull_equiv)
 
-    def quantile(self, q, dim=None, interpolation="linear"):
+    def quantile(
+        self,
+        q,
+        dim=None,
+        interpolation="linear",
+        keep_attrs: Optional[bool] = None,
+    ):
         """Compute the qth quantile of the data along the specified dimension.
 
         Returns the qth quantiles(s) of the array elements.
@@ -1615,6 +1621,10 @@ class Variable(
                 * higher: ``j``.
                 * nearest: ``i`` or ``j``, whichever is nearest.
                 * midpoint: ``(i + j) / 2``.
+        keep_attrs : bool, optional
+            If True, the variable's attributes (``attrs``) are copied to the
+            result. If False, attributes are dropped. If None (default), the
+            global ``keep_attrs`` option is used (defaults to False).
 
         Returns
         -------
@@ -1658,7 +1668,10 @@ class Variable(
         qs = np.nanpercentile(
             self.data, q * 100.0, axis=axis, interpolation=interpolation
         )
-        return Variable(new_dims, qs)
+        if keep_attrs is None:
+            keep_attrs = _get_keep_attrs(default=False)
+        attrs = self._attrs if keep_attrs else None
+        return Variable(new_dims, qs, attrs=attrs)
 
     def rank(self, dim, pct=False):
         """Ranks the data.
