@@ -2028,6 +2028,103 @@ def test_polyval(
     xr.testing.assert_allclose(actual, expected)
 
 
+def _polyval_expected_from_numeric(
+    numeric: xr.DataArray, coeffs: xr.DataArray
+) -> xr.DataArray:
+    numeric = numeric.astype(float)
+    max_degree = int(coeffs.coords["degree"].max().item())
+    result = xr.zeros_like(numeric, dtype=float) + float(
+        coeffs.sel(degree=max_degree)
+    )
+    for degree in range(max_degree - 1, -1, -1):
+        result = result * numeric + float(coeffs.sel(degree=degree))
+    return result
+
+
+@pytest.mark.parametrize("use_dask", [False, True])
+def test_polyval_timedelta_dataarray(use_dask: bool) -> None:
+    coord = xr.DataArray(
+        np.array(
+            [
+                [np.timedelta64(-2, "h"), np.timedelta64(0, "ns")],
+                [np.timedelta64(36, "m"), np.timedelta64("NaT", "ns")],
+            ],
+            dtype="timedelta64[ns]",
+        ),
+        dims=("x", "y"),
+        coords={"x": ["row0", "row1"], "y": ["col0", "col1"]},
+    )
+    coeffs = xr.DataArray(
+        np.array([1.5, -0.25, 0.01], dtype=float),
+        dims="degree",
+        coords={"degree": [0, 1, 2]},
+    )
+
+    numeric = coord / np.timedelta64(1, "ns")
+    expected = _polyval_expected_from_numeric(numeric, coeffs)
+
+    coord_in = coord
+    coeffs_in = coeffs
+    if use_dask:
+        if not has_dask:
+            pytest.skip("requires dask")
+        coord_in = coord.chunk({"x": 1, "y": 2})
+        coeffs_in = coeffs.chunk({"degree": 1})
+
+    with raise_if_dask_computes():
+        actual = xr.polyval(coord=coord_in, coeffs=coeffs_in)
+
+    xr.testing.assert_allclose(actual, expected)
+    assert actual.dtype == np.float64
+
+
+@pytest.mark.parametrize("use_dask", [False, True])
+def test_polyval_timedelta_dataset(use_dask: bool) -> None:
+    coord = xr.Dataset(
+        {
+            "east": ("lat", np.array([
+                np.timedelta64(-12, "h"),
+                np.timedelta64("NaT", "ns"),
+                np.timedelta64(18, "h"),
+            ], dtype="timedelta64[ns]")),
+            "west": (("lat", "lon"), np.array([
+                [np.timedelta64(0, "ns"), np.timedelta64(30, "m")],
+                [np.timedelta64(-45, "m"), np.timedelta64("NaT", "ns")],
+                [np.timedelta64(2, "h"), np.timedelta64(-90, "m")],
+            ], dtype="timedelta64[ns]")),
+        },
+        coords={"lat": ["south", "mid", "north"], "lon": ["west", "east"]},
+    )
+    coeffs = xr.Dataset(
+        {
+            "east": ("degree", np.array([1.0, 0.5, -0.125], dtype=float)),
+            "west": ("degree", np.array([2, -1, 1], dtype=np.int64)),
+        },
+        coords={"degree": [0, 1, 2]},
+    )
+
+    expected_vars = {}
+    for name, var in coord.data_vars.items():
+        numeric = var / np.timedelta64(1, "ns")
+        expected_vars[name] = _polyval_expected_from_numeric(numeric, coeffs[name])
+    expected = xr.Dataset(expected_vars, coords=coord.coords)
+
+    coord_in = coord
+    coeffs_in = coeffs
+    if use_dask:
+        if not has_dask:
+            pytest.skip("requires dask")
+        coord_in = coord.chunk({"lat": 2, "lon": 1})
+        coeffs_in = coeffs.chunk({"degree": 1})
+
+    with raise_if_dask_computes():
+        actual = xr.polyval(coord=coord_in, coeffs=coeffs_in)
+
+    xr.testing.assert_allclose(actual, expected)
+    for var in actual.data_vars.values():
+        assert var.dtype == np.float64
+
+
 def test_polyval_degree_dim_checks():
     x = (xr.DataArray([1, 2, 3], dims="x"),)
     coeffs = xr.DataArray([2, 3, 4], dims="degree", coords={"degree": [0, 1, 2]})
