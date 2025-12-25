@@ -805,6 +805,11 @@ def dataset_merge_method(
 ) -> _MergeResult:
     """Guts of the Dataset.merge method.
     """
+    from .dataarray import DataArray
+
+    if isinstance(other, DataArray):
+        other = other.to_dataset()
+
     # we are locked into supporting overwrite_vars for the Dataset.merge
     # method due for backwards compatibility
     # TODO: consider deprecating it?

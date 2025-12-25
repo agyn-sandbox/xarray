@@ -253,3 +253,40 @@ class TestMergeMethod:
         with pytest.raises(xr.MergeError):
             ds3 = xr.Dataset({"a": ("y", [2, 3]), "y": [1, 2]})
             ds1.merge(ds3, compat="no_conflicts")
+
+    def test_merge_dataarray_matches_function(self):
+        ds = xr.Dataset({"a": 0})
+        da = xr.DataArray(1, name="b")
+
+        expected = xr.merge([ds, da])
+        actual = ds.merge(da)
+
+        assert actual.identical(expected)
+
+    def test_merge_dataarray_requires_name(self):
+        ds = xr.Dataset({"a": 0})
+        da = xr.DataArray(1)
+
+        with raises_regex(ValueError, "without providing an explicit name"):
+            ds.merge(da)
+
+    def test_merge_dataarray_overwrite_conflict(self):
+        ds = xr.Dataset({"a": 0})
+        da = xr.DataArray(1, name="a")
+
+        with pytest.raises(xr.MergeError):
+            ds.merge(da)
+
+        merged = ds.merge(da, overwrite_vars="a")
+        expected = xr.Dataset({"a": 1})
+
+        assert merged.identical(expected)
+
+    def test_merge_dataarray_join_parity(self):
+        ds = xr.Dataset({"a": ("x", [1, 2])}, coords={"x": [0, 1]})
+        da = xr.DataArray([3, 4], dims="x", coords={"x": [1, 2]}, name="b")
+
+        expected = xr.merge([ds, da], join="outer")
+        actual = ds.merge(da, join="outer")
+
+        assert actual.identical(expected)
