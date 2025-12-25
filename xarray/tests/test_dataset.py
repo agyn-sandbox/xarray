@@ -1050,6 +1050,31 @@ class TestDataset:
             data.chunk({"foo": 10})
 
     @requires_dask
+    def test_chunk_properties_lazy_data(self) -> None:
+        import dask.array as da
+
+        lazy = da.ones((4, 6), chunks=(2, 3))
+        data = Dataset({"foo": (("x", "y"), lazy)})
+        array = data["foo"]
+
+        expected_tuple = lazy.chunks
+        expected_mapping = {dim: chunk for dim, chunk in zip(array.dims, expected_tuple)}
+
+        assert array.chunks == expected_tuple
+        assert dict(array.chunksizes) == expected_mapping
+        assert dict(data.chunks) == expected_mapping
+        assert dict(data.chunksizes) == expected_mapping
+
+    def test_chunksizes_numpy_data(self) -> None:
+        array = xr.DataArray(np.ones((2, 3)), dims=("x", "y"))
+        data = array.to_dataset(name="foo")
+
+        assert array.chunks is None
+        assert dict(array.chunksizes) == {}
+        assert dict(data.chunks) == {}
+        assert dict(data.chunksizes) == {}
+
+    @requires_dask
     def test_dask_is_lazy(self) -> None:
         store = InaccessibleVariableDataStore()
         create_test_data().dump_to_store(store)
