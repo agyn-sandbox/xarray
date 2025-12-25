@@ -1860,7 +1860,26 @@ def where(cond, x, y, keep_attrs=None):
     if keep_attrs is True:
         # keep the attributes of x, the second parameter, by default to
         # be consistent with the `where` method of `DataArray` and `Dataset`
-        keep_attrs = lambda attrs, context: getattr(x, "attrs", {})
+        result = apply_ufunc(
+            duck_array_ops.where,
+            cond,
+            x,
+            y,
+            join="exact",
+            dataset_join="exact",
+            dask="allowed",
+            keep_attrs="override",
+        )
+        result.attrs = getattr(x, "attrs", {})
+
+        from .dataset import Dataset  # local import to avoid circular dependency
+
+        if isinstance(result, Dataset) and isinstance(x, Dataset):
+            for name, data_var in x.data_vars.items():
+                if name in result.data_vars:
+                    result[name].attrs = data_var.attrs.copy()
+
+        return result
 
     # alignment for three arguments is complicated, so don't support it yet
     return apply_ufunc(
