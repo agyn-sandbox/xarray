@@ -3526,6 +3526,72 @@ class TestDataset:
         assert_identical(expected, actual)
         assert list(actual.xindexes) == ["z", "xx", "y"]
 
+    @pytest.mark.parametrize(
+        "values",
+        [
+            np.array([-3, 0, 7], dtype=np.int32),
+            np.array([1, 2, 3], dtype=np.int64),
+            np.array([0.5, 1.25, -2.5], dtype=np.float32),
+            np.array([0.0, -1.5, 3.25], dtype=np.float64),
+            np.array(["a", "b", "c"], dtype="<U1"),
+        ],
+    )
+    def test_stack_preserves_level_dtype_single_level(self, values) -> None:
+        ds = xr.Dataset(coords={"x": ("x", values)})
+
+        stacked = ds.stack(z=("x",))
+        coord = stacked["x"]
+
+        expected_dtype = values.dtype
+        assert coord.dtype == expected_dtype
+        assert coord.values.dtype == expected_dtype
+
+    def test_stack_preserves_multiindex_level_dtypes(self) -> None:
+        ds = xr.Dataset(
+            data_vars={"v": (("x", "y"), np.arange(4).reshape(2, 2))},
+            coords={
+                "x": ("x", np.array([1, 2], dtype=np.int32)),
+                "y": ("y", np.array([0.5, 1.5], dtype=np.float32)),
+                "label": ("y", np.array(["a", "b"], dtype="<U1")),
+            },
+        )
+
+        stacked = ds.stack(z=("x", "y"))
+
+        x_coord = stacked["x"]
+        assert x_coord.dtype == np.dtype("int32")
+        assert x_coord.values.dtype == np.dtype("int32")
+
+        y_coord = stacked["y"]
+        assert y_coord.dtype == np.dtype("float32")
+        assert y_coord.values.dtype == np.dtype("float32")
+
+        label_coord = stacked["label"]
+        assert label_coord.dtype == np.dtype("<U1")
+        assert label_coord.values.dtype == np.dtype("<U1")
+
+        mindex_coord = stacked["z"]
+        assert mindex_coord.dtype == np.dtype("O")
+        assert mindex_coord.values.dtype == np.dtype("O")
+
+    def test_stack_unstack_roundtrip_preserves_dtypes(self) -> None:
+        ds = xr.Dataset(
+            data_vars={"value": (("x", "y"), np.arange(4).reshape(2, 2))},
+            coords={
+                "x": ("x", np.array([-2, 5], dtype=np.int32)),
+                "y": ("y", np.array([0.5, 1.5], dtype=np.float32)),
+                "label": ("y", np.array(["a", "b"], dtype="<U1")),
+            },
+        )
+
+        stacked = ds.stack(z=("x", "y"))
+        unstacked = stacked.unstack("z")
+
+        for name in ["x", "y", "label"]:
+            expected_dtype = ds[name].dtype
+            assert unstacked[name].dtype == expected_dtype
+            assert unstacked[name].values.dtype == ds[name].values.dtype
+
     def test_unstack(self) -> None:
         index = pd.MultiIndex.from_product([[0, 1], ["a", "b"]], names=["x", "y"])
         ds = Dataset(data_vars={"b": ("z", [0, 1, 2, 3])}, coords={"z": index})
