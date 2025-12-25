@@ -3564,6 +3564,24 @@ class TestPydap:
             )
         return ds
 
+    def _create_pydap_byte_dataset(self, unsigned_attr=None):
+        from pydap.model import BaseType, DatasetType
+
+        values = np.array([0, 127, 128, 255], dtype="uint8")
+        attrs = {}
+        if unsigned_attr is not None:
+            attrs["_Unsigned"] = unsigned_attr
+
+        dataset = DatasetType("unsigned_bytes")
+        dataset["dim"] = BaseType("dim", np.arange(values.size), dims=("dim",))
+        dataset["byte_var"] = BaseType(
+            "byte_var",
+            values,
+            dims=("dim",),
+            attributes=attrs,
+        )
+        return dataset, values
+
     @contextlib.contextmanager
     def create_datasets(self, **kwargs):
         with open_example_dataset("bears.nc") as expected:
@@ -3620,6 +3638,49 @@ class TestPydap:
     def test_dask(self):
         with self.create_datasets(chunks={"j": 2}) as (actual, expected):
             assert_equal(actual, expected)
+
+    @pytest.mark.parametrize("unsigned_attr", ["false", "FALSE", False])
+    def test_unsigned_false_byte_decoding(self, unsigned_attr):
+        pydap_ds, values = self._create_pydap_byte_dataset(unsigned_attr)
+        with open_dataset(PydapDataStore(pydap_ds)) as actual:
+            decoded = actual["byte_var"]
+            assert decoded.dtype == np.dtype("int8")
+            expected = np.asarray(values, dtype="int8")
+            assert_array_equal(decoded.values, expected)
+
+    @requires_netCDF4
+    def test_pydap_netcdf4_unsigned_false_parity(self):
+        pydap_ds, _ = self._create_pydap_byte_dataset("false")
+        with open_dataset(PydapDataStore(pydap_ds)) as pydap_decoded:
+            with create_tmp_file() as tmp_path:
+                import netCDF4
+
+                root = netCDF4.Dataset(tmp_path, mode="w")
+                try:
+                    root.createDimension("dim", 4)
+                    var = root.createVariable("byte_var", "u1", ("dim",))
+                    var[:] = np.array([0, 127, 128, 255], dtype="uint8")
+                    var.setncattr("_Unsigned", "false")
+                finally:
+                    root.close()
+
+                with open_dataset(tmp_path, engine="netcdf4") as netcdf_decoded:
+                    assert_array_equal(
+                        pydap_decoded["byte_var"].values,
+                        netcdf_decoded["byte_var"].values,
+                    )
+                    assert (
+                        pydap_decoded["byte_var"].dtype
+                        == netcdf_decoded["byte_var"].dtype
+                        == np.dtype("int8")
+                    )
+
+    def test_unsigned_attribute_absent_preserves_uint8(self):
+        pydap_ds, values = self._create_pydap_byte_dataset()
+        with open_dataset(PydapDataStore(pydap_ds)) as actual:
+            decoded = actual["byte_var"]
+            assert decoded.dtype == np.dtype("uint8")
+            assert_array_equal(decoded.values, values)
 
 
 @network

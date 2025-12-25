@@ -308,14 +308,31 @@ class UnsignedIntegerCoder(VariableCoder):
         if "_Unsigned" in attrs:
             unsigned = pop_to(attrs, encoding, "_Unsigned")
 
+            if isinstance(unsigned, (bool, np.bool_)):
+                unsigned_value = "true" if bool(unsigned) else "false"
+            elif isinstance(unsigned, str):
+                unsigned_value = unsigned.strip().lower()
+            else:
+                unsigned_value = unsigned
+
             if data.dtype.kind == "i":
-                if unsigned == "true":
+                if unsigned_value == "true":
                     unsigned_dtype = np.dtype("u%s" % data.dtype.itemsize)
                     transform = partial(np.asarray, dtype=unsigned_dtype)
                     data = lazy_elemwise_func(data, transform, unsigned_dtype)
                     if "_FillValue" in attrs:
                         new_fill = unsigned_dtype.type(attrs["_FillValue"])
                         attrs["_FillValue"] = new_fill
+            elif data.dtype.kind == "u":
+                if data.dtype.itemsize == 1 and (
+                    unsigned_value == "false" or unsigned_value is False
+                ):
+                    signed_dtype = np.dtype("i1")
+                    transform = partial(np.asarray, dtype=signed_dtype)
+                    data = lazy_elemwise_func(data, transform, signed_dtype)
+                    for attr_name in ("_FillValue", "missing_value"):
+                        if attr_name in attrs:
+                            attrs[attr_name] = signed_dtype.type(attrs[attr_name])
             else:
                 warnings.warn(
                     "variable %r has _Unsigned attribute but is not "
