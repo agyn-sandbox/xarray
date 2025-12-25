@@ -1090,6 +1090,30 @@ class TestDataArray:
         assert_identical(da[:3, :4], da.loc[["a", "b", "c"], np.arange(4)])
         assert_identical(da[:, :4], da.loc[:, self.ds["y"] < 4])
 
+    def test_loc_dimension_named_method(self):
+        data = DataArray(
+            np.arange(6).reshape(2, 3),
+            dims=["x", "method"],
+            coords={"x": [0, 1], "method": ["nearest", "pad", "backfill"]},
+        )
+
+        expected = data.sel({"method": "nearest"})
+        actual = data.loc[{"method": "nearest"}]
+
+        assert_identical(actual, expected)
+
+    def test_sel_method_keyword_retained(self):
+        data = DataArray(
+            [0, 1, 2],
+            dims=["x"],
+            coords={"x": [0.0, 1.0, 2.0]},
+        )
+
+        expected = data.sel(x=1.0)
+        actual = data.sel(x=1.2, method="nearest")
+
+        assert_identical(actual, expected)
+
     def test_loc_datetime64_value(self):
         # regression test for https://github.com/pydata/xarray/issues/4283
         t = np.array(["2017-09-05T12", "2017-09-05T15"], dtype="datetime64[ns]")
