@@ -2995,6 +2995,47 @@ class TestDataset:
         assert isinstance(actual.variables["x"], Variable)
         assert actual.xindexes["y"].equals(expected.xindexes["y"])
 
+    def test_swap_dims_does_not_mutate_original(self) -> None:
+        ds = Dataset(
+            data_vars={"value": ("x", [0, 1])},
+            coords={"x": ("x", [0, 1]), "y": ("x", ["a", "b"])},
+        )
+
+        swapped = ds.swap_dims({"x": "y"})
+
+        assert ds.dims == {"x": 2}
+        assert ds.coords["x"].dims == ("x",)
+        assert ds.coords["y"].dims == ("x",)
+
+        assert swapped.dims == {"y": 2}
+        assert swapped.coords["y"].dims == ("y",)
+        assert swapped.coords["x"].dims == ("y",)
+
+    def test_swap_dims_chained_no_mutation(self) -> None:
+        ds = Dataset(
+            data_vars={"value": ("x", [0, 1])},
+            coords={
+                "x": ("x", [0, 1]),
+                "y": ("x", ["a", "b"]),
+                "z": ("x", ["alpha", "beta"]),
+            },
+        )
+
+        first = ds.swap_dims({"x": "y"})
+        second = first.swap_dims({"y": "z"})
+
+        assert ds.coords["x"].dims == ("x",)
+        assert ds.coords["y"].dims == ("x",)
+        assert ds.coords["z"].dims == ("x",)
+
+        assert first.dims == {"y": 2}
+        assert first.coords["x"].dims == ("y",)
+        assert first.coords["y"].dims == ("y",)
+        assert first.coords["z"].dims == ("y",)
+
+        expected = ds.swap_dims({"x": "z"}).set_coords("y")
+        assert_identical(expected, second)
+
     def test_expand_dims_error(self) -> None:
         original = Dataset(
             {

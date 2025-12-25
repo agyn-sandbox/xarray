@@ -1793,6 +1793,23 @@ class TestDataArray:
         for dim_name in set().union(expected.xindexes.keys(), actual.xindexes.keys()):
             assert actual.xindexes[dim_name].equals(expected.xindexes[dim_name])
 
+    def test_swap_dims_does_not_mutate_original(self) -> None:
+        array = DataArray(
+            [0, 1],
+            coords={"x": ("x", [0, 1]), "y": ("x", ["a", "b"])},
+            dims="x",
+        )
+
+        swapped = array.swap_dims({"x": "y"})
+
+        assert array.dims == ("x",)
+        assert array.coords["x"].dims == ("x",)
+        assert array.coords["y"].dims == ("x",)
+
+        assert swapped.dims == ("y",)
+        assert swapped.coords["x"].dims == ("y",)
+        assert swapped.coords["y"].dims == ("y",)
+
     def test_expand_dims_error(self) -> None:
         array = DataArray(
             np.random.randn(3, 4),
