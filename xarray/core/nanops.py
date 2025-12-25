@@ -1,4 +1,7 @@
+import math
+
 import numpy as np
+from numpy.core.multiarray import normalize_axis_index
 
 from . import dtypes, nputils, utils
 from .duck_array_ops import _dask_or_eager_func, count, fillna, isnull, where_method
@@ -23,27 +26,92 @@ def _replace_nan(a, val):
 
 
 def _maybe_null_out(result, axis, mask, min_count=1):
-    """
-    xarray version of pandas.core.nanops._maybe_null_out
-    """
-    if hasattr(axis, "__len__"):  # if tuple or list
-        raise ValueError(
-            "min_count is not available for reduction with more than one dimensions."
+    """xarray version of pandas.core.nanops._maybe_null_out."""
+
+    mask_ndim = getattr(mask, "ndim", 0)
+
+    if axis is None:
+        axes = tuple(range(mask_ndim))
+    else:
+        if np.isscalar(axis):
+            axes = (int(axis),)
+        else:
+            axes = tuple(int(a) for a in np.atleast_1d(axis).tolist())
+        axes = tuple(normalize_axis_index(ax, mask_ndim) for ax in axes)
+
+    if axes:
+        total = math.prod(mask.shape[ax] for ax in axes)
+        nan_count = mask.sum(axis=axes)
+    else:
+        total = mask.size
+        nan_count = mask.sum()
+
+    valid_count = total - nan_count
+    null_mask = valid_count < min_count
+
+    if isinstance(null_mask, (bool, np.bool_)):
+        keep_mask = not null_mask
+    else:
+        keep_mask = np.logical_not(null_mask)
+
+    result_dtype = getattr(result, "dtype", None)
+    if result_dtype is None:
+        result_dtype = np.asarray(result).dtype
+
+    is_dask = isinstance(result, dask_array_type)
+    result_ndim = getattr(result, "ndim", 0)
+
+    na_capable = (
+        np.issubdtype(result_dtype, np.floating)
+        or np.issubdtype(result_dtype, np.complexfloating)
+        or np.issubdtype(result_dtype, np.datetime64)
+        or np.issubdtype(result_dtype, np.timedelta64)
+        or result_dtype.kind == "O"
+    )
+
+    if na_capable:
+        if not is_dask:
+            has_nulls = (
+                null_mask
+                if isinstance(null_mask, (bool, np.bool_))
+                else bool(np.any(null_mask))
+            )
+            if not has_nulls:
+                return result
+
+        fill_value = dtypes.get_fill_value(result_dtype)
+
+        if not is_dask and result_ndim == 0:
+            keep_scalar = (
+                keep_mask
+                if isinstance(keep_mask, (bool, np.bool_))
+                else bool(keep_mask)
+            )
+            return result if keep_scalar else fill_value
+
+        return where_method(result, keep_mask, fill_value)
+
+    if not is_dask:
+        has_nulls = (
+            null_mask
+            if isinstance(null_mask, (bool, np.bool_))
+            else bool(np.any(null_mask))
         )
+        if not has_nulls:
+            return result
 
-    if axis is not None and getattr(result, "ndim", False):
-        null_mask = (mask.shape[axis] - mask.sum(axis) - min_count) < 0
-        if null_mask.any():
-            dtype, fill_value = dtypes.maybe_promote(result.dtype)
-            result = result.astype(dtype)
-            result[null_mask] = fill_value
+    dtype, fill_value = dtypes.maybe_promote(result_dtype)
 
-    elif getattr(result, "dtype", None) not in dtypes.NAT_TYPES:
-        null_mask = mask.size - mask.sum()
-        if null_mask < min_count:
-            result = np.nan
+    if not is_dask and result_ndim == 0:
+        keep_scalar = (
+            keep_mask
+            if isinstance(keep_mask, (bool, np.bool_))
+            else bool(keep_mask)
+        )
+        return result if keep_scalar else fill_value
 
-    return result
+    result = result.astype(dtype, copy=False)
+    return where_method(result, keep_mask, fill_value)
 
 
 def _nan_argminmax_object(func, fill_value, value, axis=None, **kwargs):
