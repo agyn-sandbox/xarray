@@ -3,6 +3,7 @@ from itertools import product
 from datetime import datetime
 
 import numpy as np
+import pandas as pd
 import pytest
 
 from xarray import (DataArray, Dataset, concat, combine_by_coords,
@@ -617,6 +618,91 @@ class TestCombineAuto:
         with raises_regex(ValueError, "does not have monotonic global indexes"
                                       " along dimension x"):
             combine_by_coords([ds1, ds0])
+
+    def test_combine_by_coords_identical_nonmonotonic_bystander(self):
+        y = ['a', 'c', 'b']
+        left = Dataset(
+            data_vars={'data': (('x', 'y'), np.arange(9).reshape(3, 3))},
+            coords={'x': [1, 2, 3], 'y': y}
+        )
+        right = Dataset(
+            data_vars={'data': (('x', 'y'), np.arange(12).reshape(4, 3) + 9)},
+            coords={'x': [4, 5, 6, 7], 'y': y}
+        )
+
+        expected = concat([left, right], dim='x')
+        actual = combine_by_coords([left, right])
+        assert_identical(actual, expected)
+
+    def test_combine_by_coords_nonidentical_nonmonotonic_raises(self):
+        y = ['a', 'c', 'b']
+        left = Dataset(
+            data_vars={'data': (('x', 'y'), np.arange(9).reshape(3, 3))},
+            coords={'x': [0, 1, 5], 'y': y}
+        )
+        right = Dataset(
+            data_vars={'data': (('x', 'y'), np.arange(6).reshape(2, 3) + 9)},
+            coords={'x': [2, 3], 'y': y}
+        )
+
+        with raises_regex(
+            ValueError, "monotonic global indexes along dimension x"
+        ):
+            combine_by_coords([right, left])
+
+    def test_combine_by_coords_multiindex_bystander_nonmonotonic(self):
+        y = pd.MultiIndex.from_tuples(
+            [('a', 0), ('c', 0), ('b', 0)],
+            names=['outer', 'inner']
+        )
+        left = Dataset(
+            data_vars={
+                'data': (('x', 'y'), np.arange(6).reshape(2, 3)),
+            },
+            coords={
+                'x': [0, 1],
+                'y': y,
+            }
+        )
+        right = Dataset(
+            data_vars={
+                'data': (('x', 'y'), np.arange(6, 12).reshape(2, 3)),
+            },
+            coords={
+                'x': [2, 3],
+                'y': y,
+            }
+        )
+
+        expected = concat([left, right], dim='x')
+        actual = combine_by_coords([left, right])
+        assert_identical(actual, expected)
+
+    def test_combine_by_coords_scalar_and_nondim_coords_unaffected(self):
+        labels = ['z', 'y']
+        left = Dataset(
+            data_vars={'data': (('x', 'sample'), np.arange(4).reshape(2, 2))},
+            coords={
+                'x': [0, 1],
+                'sample': ['u', 'v'],
+                'label': ('sample', labels),
+                'run': 0,
+            }
+        )
+        right = Dataset(
+            data_vars={'data': (('x', 'sample'),
+                                np.arange(4, 8).reshape(2, 2))},
+            coords={
+                'x': [2, 3],
+                'sample': ['u', 'v'],
+                'label': ('sample', labels),
+                'run': 0,
+            }
+        )
+
+        expected = concat([left, right], dim='x')
+        actual = combine_by_coords([left, right])
+        assert_identical(actual, expected)
 
 
 @pytest.mark.filterwarnings("ignore:In xarray version 0.13 `auto_combine` "
