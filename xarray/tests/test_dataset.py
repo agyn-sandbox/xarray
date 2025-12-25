@@ -3045,6 +3045,23 @@ class TestDataset:
         d0 = D.isel(x=0)
         assert_identical(d0, x0)
 
+    def test_to_stacked_array_to_unstacked_dataset_single_dim_roundtrip(self):
+        arr = xr.DataArray(
+            np.arange(3),
+            coords=[("x", [0, 1, 2])],
+            attrs={"units": "m"},
+        )
+        ds = xr.Dataset({"a": arr, "b": arr})
+
+        stacked = ds.to_stacked_array("y", sample_dims=["x"])
+        roundtripped = stacked.to_unstacked_dataset("y")
+
+        xr.testing.assert_identical(ds, roundtripped)
+        assert set(roundtripped.coords) == set(ds.coords)
+        xr.testing.assert_identical(roundtripped.coords["x"], ds.coords["x"])
+        assert roundtripped["a"].attrs == ds["a"].attrs
+        assert roundtripped["b"].attrs == ds["b"].attrs
+
     def test_to_stacked_array_to_unstacked_dataset_different_dimension(self):
         # test when variables have different dimensionality
         a, b = create_test_stacked_array()
