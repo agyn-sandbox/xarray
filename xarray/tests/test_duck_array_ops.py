@@ -595,6 +595,82 @@ def test_min_count(dim_num, dtype, dask, func, aggdim):
     assert_dask_array(actual, dask)
 
 
+def test_nansum_min_count_multi_axis_mcve():
+    da = DataArray(
+        np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]),
+        dims=("dim_0", "dim_1"),
+    )
+
+    result = da.sum(dim=("dim_0", "dim_1"), skipna=True, min_count=1)
+
+    assert result.item() == pytest.approx(21.0)
+
+
+@pytest.mark.parametrize(
+    "func, expectations",
+    [
+        (
+            "sum",
+            {
+                1: [14.0, 31.0],
+                4: [14.0, np.nan],
+                6: [np.nan, np.nan],
+            },
+        ),
+        (
+            "prod",
+            {
+                1: [72.0, 1056.0],
+                4: [72.0, np.nan],
+                6: [np.nan, np.nan],
+            },
+        ),
+    ],
+)
+def test_min_count_multi_axis_thresholds(func, expectations):
+    values = np.array(
+        [
+            [[1.0, np.nan, 3.0], [4.0, np.nan, 6.0]],
+            [[np.nan, 8.0, np.nan], [np.nan, 11.0, 12.0]],
+        ]
+    )
+    da = DataArray(values, dims=("dim_0", "dim_1", "dim_2"))
+
+    for min_count, expected in expectations.items():
+        actual = getattr(da, func)(
+            dim=("dim_1", "dim_2"), skipna=True, min_count=min_count
+        )
+        expected_da = DataArray(
+            np.array(expected, dtype=float),
+            dims=("dim_0",),
+        )
+        assert_allclose(actual, expected_da)
+
+
+@pytest.mark.parametrize("func", ["sum", "prod"])
+@pytest.mark.parametrize("dask", [False, True])
+def test_min_count_multi_axis_scalar_nan(func, dask):
+    if dask and not has_dask:
+        pytest.skip("requires dask")
+
+    values = np.arange(1, 13).reshape(2, 2, 3)
+    da = DataArray(values, dims=("dim_0", "dim_1", "dim_2"))
+    if dask:
+        da = da.chunk({"dim_0": 1, "dim_1": 2, "dim_2": 3})
+
+    min_count = values.size + 1
+    actual = getattr(da, func)(
+        dim=("dim_0", "dim_1", "dim_2"), skipna=True, min_count=min_count
+    )
+
+    assert actual.dtype == np.float64
+    if dask:
+        assert isinstance(actual.data, dask_array_type)
+        actual = actual.compute()
+
+    assert np.isnan(actual.values)
+
+
 @pytest.mark.parametrize("func", ["sum", "prod"])
 def test_min_count_dataset(func):
     da = construct_dataarray(2, dtype=float, contains_nan=True, dask=False)

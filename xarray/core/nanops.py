@@ -1,4 +1,7 @@
+import math
+
 import numpy as np
+from numpy.core.multiarray import normalize_axis_index
 
 from . import dtypes, nputils, utils
 from .duck_array_ops import _dask_or_eager_func, count, fillna, isnull, where_method
@@ -23,27 +26,43 @@ def _replace_nan(a, val):
 
 
 def _maybe_null_out(result, axis, mask, min_count=1):
-    """
-    xarray version of pandas.core.nanops._maybe_null_out
-    """
-    if hasattr(axis, "__len__"):  # if tuple or list
-        raise ValueError(
-            "min_count is not available for reduction with more than one dimensions."
-        )
+    """xarray version of pandas.core.nanops._maybe_null_out."""
 
-    if axis is not None and getattr(result, "ndim", False):
-        null_mask = (mask.shape[axis] - mask.sum(axis) - min_count) < 0
-        if null_mask.any():
-            dtype, fill_value = dtypes.maybe_promote(result.dtype)
-            result = result.astype(dtype)
-            result[null_mask] = fill_value
+    mask_ndim = getattr(mask, "ndim", 0)
 
-    elif getattr(result, "dtype", None) not in dtypes.NAT_TYPES:
-        null_mask = mask.size - mask.sum()
-        if null_mask < min_count:
-            result = np.nan
+    if axis is None:
+        axes = tuple(range(mask_ndim))
+    else:
+        if np.isscalar(axis):
+            axes = (int(axis),)
+        else:
+            axes = tuple(int(a) for a in np.atleast_1d(axis).tolist())
+        axes = tuple(normalize_axis_index(ax, mask_ndim) for ax in axes)
 
-    return result
+    if axes:
+        total = math.prod(mask.shape[ax] for ax in axes)
+        nan_count = mask.sum(axis=axes)
+    else:
+        total = mask.size
+        nan_count = mask.sum()
+
+    valid_count = total - nan_count
+    keep_mask = valid_count >= min_count
+
+    result_dtype = getattr(result, "dtype", None)
+    if result_dtype is None:
+        result_dtype = np.asarray(result).dtype
+
+    dtype, fill_value = dtypes.maybe_promote(result_dtype)
+
+    if getattr(result, "ndim", 0) > 0 or isinstance(result, dask_array_type):
+        result = result.astype(dtype, copy=False)
+        return where_method(result, keep_mask, fill_value)
+
+    if keep_mask:
+        return result
+
+    return fill_value
 
 
 def _nan_argminmax_object(func, fill_value, value, axis=None, **kwargs):
