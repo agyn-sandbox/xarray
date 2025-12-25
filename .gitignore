@@ -72,3 +72,4 @@ xarray/tests/data/*.grib.*.idx
 Icon*
 
 .ipynb_checkpoints
+.venv/
