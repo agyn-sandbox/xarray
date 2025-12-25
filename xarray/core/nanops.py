@@ -47,7 +47,14 @@ def _maybe_null_out(result, axis, mask, min_count=1):
         nan_count = mask.sum()
 
     valid_count = total - nan_count
-    keep_mask = valid_count >= min_count
+    null_mask = valid_count < min_count
+    keep_mask = np.logical_not(null_mask)
+
+    is_dask = isinstance(result, dask_array_type)
+    if not is_dask:
+        has_nulls = bool(np.any(null_mask)) if hasattr(null_mask, "any") else bool(null_mask)
+        if not has_nulls:
+            return result
 
     result_dtype = getattr(result, "dtype", None)
     if result_dtype is None:
@@ -55,7 +62,7 @@ def _maybe_null_out(result, axis, mask, min_count=1):
 
     dtype, fill_value = dtypes.maybe_promote(result_dtype)
 
-    if getattr(result, "ndim", 0) > 0 or isinstance(result, dask_array_type):
+    if is_dask or getattr(result, "ndim", 0) > 0:
         result = result.astype(dtype, copy=False)
         return where_method(result, keep_mask, fill_value)
 

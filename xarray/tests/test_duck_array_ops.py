@@ -606,6 +606,16 @@ def test_nansum_min_count_multi_axis_mcve():
     assert result.item() == pytest.approx(21.0)
 
 
+def test_min_count_multi_axis_dtype_preserved():
+    values = np.arange(1, 7, dtype=np.int64).reshape(2, 3)
+    da = DataArray(values, dims=("dim_0", "dim_1"))
+
+    result = da.sum(dim=("dim_0", "dim_1"), skipna=True, min_count=values.size)
+
+    assert result.dtype == values.dtype
+    assert result.item() == values.sum()
+
+
 @pytest.mark.parametrize(
     "func, expectations",
     [
