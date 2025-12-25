@@ -365,7 +365,9 @@ class DataVariables(Mapping[Any, "DataArray"]):
         )
 
     def __len__(self) -> int:
-        return len(self._dataset._variables) - len(self._dataset._coord_names)
+        variables = self._dataset._variables
+        coord_names = self._dataset._coord_names
+        return len(variables) - len(coord_names & variables.keys())
 
     def __contains__(self, key: Hashable) -> bool:
         return key in self._dataset._variables and key not in self._dataset._coord_names
@@ -955,6 +957,8 @@ class Dataset(
             dims = calculate_dimensions(variables)
         if indexes is None:
             indexes = {}
+        coord_names = coord_names & variables.keys()
+
         obj = object.__new__(cls)
         obj._variables = variables
         obj._coord_names = coord_names
@@ -987,7 +991,9 @@ class Dataset(
             if variables is not None:
                 self._variables = variables
             if coord_names is not None:
-                self._coord_names = coord_names
+                self._coord_names = coord_names & self._variables.keys()
+            elif variables is not None:
+                self._coord_names = self._coord_names & self._variables.keys()
             if dims is not None:
                 self._dims = dims
             if attrs is not _default:
@@ -1002,6 +1008,7 @@ class Dataset(
                 variables = self._variables.copy()
             if coord_names is None:
                 coord_names = self._coord_names.copy()
+            coord_names = coord_names & variables.keys()
             if dims is None:
                 dims = self._dims.copy()
             if attrs is _default:
@@ -4099,7 +4106,9 @@ class Dataset(
                 new_dims = [replace_dims.get(d, d) for d in v.dims]
                 variables[k] = v._replace(dims=new_dims)
 
-        coord_names = self._coord_names - set(drop_variables) | set(new_variables)
+        coord_names = (
+            self._coord_names - set(drop_variables) | set(new_variables)
+        ) & variables.keys()
 
         return self._replace_with_new_dims(
             variables, coord_names=coord_names, indexes=indexes_
@@ -4177,7 +4186,7 @@ class Dataset(
         }
         variables.update(new_variables)
 
-        coord_names = set(new_variables) | self._coord_names
+        coord_names = (set(new_variables) | self._coord_names) & variables.keys()
 
         return self._replace(variables, coord_names=coord_names, indexes=indexes)
 
@@ -4541,7 +4550,9 @@ class Dataset(
                 else:
                     variables[name] = var
 
-        coord_names = set(self._coord_names) - {dim} | set(new_indexes)
+        coord_names = (
+            set(self._coord_names) - {dim} | set(new_indexes)
+        ) & variables.keys()
 
         return self._replace_with_new_dims(
             variables, coord_names=coord_names, indexes=indexes
@@ -4592,7 +4603,9 @@ class Dataset(
                 else:
                     variables[name] = var
 
-        coord_names = set(self._coord_names) - {dim} | set(new_dim_sizes)
+        coord_names = (
+            set(self._coord_names) - {dim} | set(new_dim_sizes)
+        ) & variables.keys()
 
         return self._replace_with_new_dims(
             variables, coord_names=coord_names, indexes=indexes
