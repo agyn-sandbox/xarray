@@ -3481,21 +3481,28 @@ class DataArray(AbstractArray, DataWithCoords):
         return self._from_temp_dataset(ds)
 
     def integrate(
-        self, dim: Union[Hashable, Sequence[Hashable]], datetime_unit: str = None
+        self,
+        coord: Optional[Union[Hashable, Sequence[Hashable]]] = None,
+        datetime_unit: Optional[str] = None,
+        dim: Optional[Union[Hashable, Sequence[Hashable]]] = None,
     ) -> "DataArray":
         """ integrate the array with the trapezoidal rule.
 
         .. note::
-            This feature is limited to simple cartesian geometry, i.e. dim
+            This feature is limited to simple cartesian geometry, i.e. ``coord``
             must be one dimensional.
 
         Parameters
         ----------
-        dim : hashable, or sequence of hashable
-            Coordinate(s) used for the integration.
+        coord : hashable, or sequence of hashable, optional
+            Coordinate(s) used for the integration. When provided positionally,
+            this argument selects the coordinate for spacing without any
+            deprecation warning.
         datetime_unit : {"Y", "M", "W", "D", "h", "m", "s", "ms", "us", "ns", \
                          "ps", "fs", "as"}, optional
             Can be used to specify the unit if datetime coordinate is used.
+        dim : hashable, or sequence of hashable, optional
+            Deprecated name for ``coord``.
 
         Returns
         -------
@@ -3523,12 +3530,38 @@ class DataArray(AbstractArray, DataWithCoords):
           * x        (x) float64 0.0 0.1 1.1 1.2
         Dimensions without coordinates: y
         >>>
-        >>> da.integrate("x")
+        >>> da.integrate(coord="x")
         <xarray.DataArray (y: 3)>
         array([5.4, 6.6, 7.8])
         Dimensions without coordinates: y
         """
-        ds = self._to_temp_dataset().integrate(dim, datetime_unit)
+        if coord is None and dim is None:
+            raise TypeError("DataArray.integrate() missing required argument 'coord'")
+
+        if coord is not None and dim is not None:
+            def _as_tuple(value: Union[Hashable, Sequence[Hashable]]) -> Tuple[Hashable, ...]:
+                if isinstance(value, Sequence) and not isinstance(value, str):
+                    return tuple(value)
+                return (value,)
+
+            if _as_tuple(coord) != _as_tuple(dim):
+                raise ValueError(
+                    "Only one of 'coord' or deprecated 'dim' may be supplied; use 'coord'."
+                )
+
+        if coord is None:
+            coord = dim
+
+        if dim is not None:
+            warnings.warn(
+                "DataArray.integrate: argument 'dim' is deprecated; use 'coord' to "
+                "specify the coordinate for spacing. 'dim' will be removed in a future "
+                "xarray release.",
+                FutureWarning,
+                stacklevel=2,
+            )
+
+        ds = self._to_temp_dataset().integrate(coord, datetime_unit=datetime_unit)
         return self._from_temp_dataset(ds)
 
     def unify_chunks(self) -> "DataArray":

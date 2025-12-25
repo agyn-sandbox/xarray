@@ -410,7 +410,7 @@ trapezoidal rule using their coordinates,
 
 .. ipython:: python
 
-    a.integrate("x")
+    a.integrate(coord="x")
 
 .. note::
     These methods are limited to simple cartesian geometry. Differentiation

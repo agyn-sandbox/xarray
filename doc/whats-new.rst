@@ -43,6 +43,14 @@ Breaking changes
   By `Aureliana Barghini <https://github.com/aurghs>`_.
 
 
+Deprecations
+~~~~~~~~~~~~
+- :py:meth:`DataArray.integrate` now mirrors :py:meth:`Dataset.integrate` by
+  accepting the ``coord`` argument for specifying the spacing coordinate.
+  Supplying the ``dim`` argument is deprecated and will be removed in a future
+  release.
+
+
 New Features
 ~~~~~~~~~~~~
 - Significantly higher ``unstack`` performance on numpy-backed arrays which
