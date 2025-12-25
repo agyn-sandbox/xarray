@@ -142,7 +142,12 @@ class Weighted:
         # we need to mask data values that are nan; else the weights are wrong
         mask = da.notnull()
 
-        sum_of_weights = self._reduce(mask, self.weights, dim=dim, skipna=False)
+        if self.weights.dtype.kind == "b":
+            weights = self.weights.astype("float64")
+        else:
+            weights = self.weights
+
+        sum_of_weights = self._reduce(mask, weights, dim=dim, skipna=False)
 
         # 0-weights are not valid
         valid_weights = sum_of_weights != 0.0

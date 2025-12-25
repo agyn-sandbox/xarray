@@ -309,3 +309,52 @@ def test_weighted_operations_keep_attr_da_in_ds(operation):
     result = getattr(data.weighted(weights), operation)(keep_attrs=True)
 
     assert data.a.attrs == result.a.attrs
+
+
+def test_weighted_mean_boolean_mcve():
+    da = xr.DataArray([1.0, 1.0, 1.0])
+    weights = xr.DataArray([True, True, False])
+    result = da.weighted(weights).mean()
+    assert result.item() == 1.0
+
+
+def test_weighted_sum_of_weights_boolean_no_nan():
+    da = xr.DataArray([1.0, 2.0, 3.0])
+    weights = xr.DataArray([True, True, False])
+    result = da.weighted(weights).sum_of_weights()
+    assert_equal(result, xr.DataArray(2.0))
+
+
+def test_weighted_sum_and_mean_boolean_no_nan():
+    da = xr.DataArray([1.0, 3.0, 2.0])
+    weights = xr.DataArray([True, True, False])
+    weighted = da.weighted(weights)
+    assert_allclose(weighted.sum(), xr.DataArray(4.0))
+    assert_allclose(weighted.mean(), xr.DataArray(2.0))
+
+
+@pytest.mark.parametrize("skipna", [True, False])
+def test_weighted_boolean_nan_behavior(skipna):
+    da = xr.DataArray([1.0, np.nan, 3.0])
+    weights = xr.DataArray([True, True, True])
+    result = da.weighted(weights).mean(skipna=skipna)
+
+    if skipna:
+        assert_allclose(result, xr.DataArray(2.0))
+    else:
+        assert result.isnull().item()
+
+
+def test_weighted_boolean_all_false_weights():
+    da = xr.DataArray([1.0, 2.0, 3.0])
+    weights = xr.DataArray([False, False, False])
+    weighted = da.weighted(weights)
+
+    sum_of_weights = weighted.sum_of_weights()
+    assert sum_of_weights.isnull().item()
+
+    weighted_sum = weighted.sum()
+    assert_allclose(weighted_sum, xr.DataArray(0.0))
+
+    mean = weighted.mean()
+    assert mean.isnull().item()
