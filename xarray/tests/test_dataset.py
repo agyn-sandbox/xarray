@@ -6572,7 +6572,7 @@ def test_integrate(dask):
     ds = xr.Dataset({"var": da})
 
     # along x
-    actual = da.integrate("x")
+    actual = da.integrate(coord="x")
     # coordinate that contains x should be dropped.
     expected_x = xr.DataArray(
         np.trapz(da.compute(), da["x"], axis=0),
@@ -6580,7 +6580,7 @@ def test_integrate(dask):
         coords={k: v for k, v in da.coords.items() if "x" not in v.dims},
     )
     assert_allclose(expected_x, actual.compute())
-    assert_equal(ds["var"].integrate("x"), ds.integrate("x")["var"])
+    assert_equal(ds["var"].integrate(coord="x"), ds.integrate(coord="x")["var"])
 
     # make sure result is also a dask array (if the source is dask array)
     assert isinstance(actual.data, type(da.data))
@@ -6597,11 +6597,65 @@ def test_integrate(dask):
     assert_equal(ds["var"].integrate("y"), ds.integrate("y")["var"])
 
     # along x and y
-    actual = da.integrate(("y", "x"))
+    actual = da.integrate(coord=("y", "x"))
     assert actual.ndim == 0
 
     with pytest.raises(ValueError):
         da.integrate("x2d")
+
+
+def test_dataarray_integrate_dim_deprecated():
+    da = xr.DataArray(
+        np.arange(4),
+        dims=["x"],
+        coords={"x": np.array([0.0, 0.1, 0.4, 0.9])},
+    )
+
+    with pytest.warns(FutureWarning, match="argument 'dim' is deprecated"):
+        actual = da.integrate(dim="x")
+
+    expected = xr.DataArray(np.trapz(da.data, da["x"].data))
+    assert_allclose(expected, actual)
+
+
+def test_dataarray_integrate_coord_and_dim_same():
+    da = xr.DataArray(
+        np.linspace(0, 1, 5),
+        dims=["x"],
+        coords={"x": np.linspace(0.5, 2.5, 5)},
+    )
+
+    with pytest.warns(FutureWarning, match="argument 'dim' is deprecated"):
+        actual = da.integrate(coord="x", dim="x")
+
+    expected = xr.DataArray(np.trapz(da.data, da["x"].data))
+    assert_allclose(expected, actual)
+
+
+def test_dataarray_integrate_coord_dim_mismatch():
+    da = xr.DataArray(
+        np.arange(6).reshape(3, 2),
+        dims=["x", "y"],
+        coords={"x": [0.0, 0.5, 0.75], "y": [1.0, 2.0]},
+    )
+
+    with pytest.raises(
+        ValueError, match="Only one of 'coord' or deprecated 'dim' may be supplied"
+    ):
+        da.integrate(coord="x", dim="y")
+
+
+def test_dataarray_integrate_non_monotonic_coord():
+    da = xr.DataArray(
+        np.array([1.0, 2.0, 0.0, 4.0]),
+        dims=["x"],
+        coords={"x": np.array([0.0, 0.5, 0.2, 1.0])},
+    )
+
+    actual = da.integrate(coord="x")
+    expected = np.trapz(da.data, da["x"].data)
+
+    np.testing.assert_allclose(actual.item(), expected)
 
 
 @pytest.mark.parametrize("dask", [True, False])
@@ -6636,7 +6690,7 @@ def test_trapz_datetime(dask, which_datetime):
     if dask and has_dask:
         da = da.chunk({"time": 4})
 
-    actual = da.integrate("time", datetime_unit="D")
+    actual = da.integrate(coord="time", datetime_unit="D")
     expected_data = np.trapz(
         da.data,
         duck_array_ops.datetime_to_numeric(da["time"].data, datetime_unit="D"),
@@ -6652,7 +6706,7 @@ def test_trapz_datetime(dask, which_datetime):
     # make sure result is also a dask array (if the source is dask array)
     assert isinstance(actual.data, type(da.data))
 
-    actual2 = da.integrate("time", datetime_unit="h")
+    actual2 = da.integrate(coord="time", datetime_unit="h")
     assert_allclose(actual, actual2 / 24.0)
 
 
