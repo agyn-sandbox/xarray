@@ -1937,6 +1937,60 @@ def test_where_attrs() -> None:
     assert actual.attrs == {}
 
 
+def test_where_keep_attrs_preserves_coordinate_attrs_dataarray() -> None:
+    lat = xr.DataArray([0, 1], dims="lat")
+    lat.attrs = {"units": "degrees_north", "description": "latitude"}
+    expected_lat_attrs = dict(lat.attrs)
+
+    cond = xr.DataArray([True, False], dims="lat", coords={"lat": lat})
+    x_attrs = {"units": "kelvin", "description": "x"}
+    y_attrs = {"units": "celsius", "description": "y"}
+    x = xr.DataArray([1, 2], dims="lat", coords={"lat": lat}, attrs=x_attrs.copy())
+    y = xr.DataArray([3, 4], dims="lat", coords={"lat": lat}, attrs=y_attrs)
+
+    result = xr.where(cond, x, y, keep_attrs=True)
+
+    assert result.attrs == x_attrs
+    assert result.coords["lat"].attrs == expected_lat_attrs
+
+
+def test_where_keep_attrs_preserves_coordinate_attrs_dataset() -> None:
+    lat = xr.DataArray([0, 1], dims="lat")
+    lat.attrs = {"units": "degrees_north", "description": "latitude"}
+    expected_lat_attrs = dict(lat.attrs)
+
+    cond = xr.DataArray([True, False], dims="lat", coords={"lat": lat})
+
+    x = xr.Dataset(
+        {
+            "temp": xr.DataArray(
+                [1.0, 2.0],
+                dims="lat",
+                coords={"lat": lat},
+                attrs={"units": "kelvin"},
+            )
+        },
+        attrs={"title": "dataset x"},
+    )
+
+    y = xr.Dataset(
+        {
+            "temp": xr.DataArray(
+                [3.0, 4.0],
+                dims="lat",
+                coords={"lat": lat},
+                attrs={"units": "celsius"},
+            )
+        },
+        attrs={"title": "dataset y"},
+    )
+
+    result = xr.where(cond, x, y, keep_attrs=True)
+
+    assert result.attrs == x.attrs
+    assert result.coords["lat"].attrs == expected_lat_attrs
+
+
 @pytest.mark.parametrize(
     "use_dask", [pytest.param(False, id="nodask"), pytest.param(True, id="dask")]
 )
