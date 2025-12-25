@@ -280,6 +280,16 @@ class TestConcatDataset:
             actual = concat([ds1, ds2], dim="x", combine_attrs=combine_attrs)
             assert_identical(actual, expected[combine_attrs])
 
+    def test_concat_override_attrs_copies_dataset_attrs(self):
+        ds1 = Dataset({"a": ("x", [0, 1])}, attrs={"meta": "left"})
+        ds2 = Dataset({"a": ("x", [2, 3])}, attrs={"meta": "right"})
+
+        merged = concat([ds1, ds2], dim="x", combine_attrs="override")
+        merged.attrs["meta"] = "merged"
+        merged.attrs["note"] = "mutated"
+
+        assert ds1.attrs == {"meta": "left"}
+
     def test_concat_promote_shape(self):
         # mixed dims within variables
         objs = [Dataset({}, {"x": 0}), Dataset({"x": [1]})]
@@ -524,6 +534,16 @@ class TestConcatDataArray:
         for combine_attrs in expected:
             actual = concat([da1, da2], dim="x", combine_attrs=combine_attrs)
             assert_identical(actual, expected[combine_attrs])
+
+    def test_concat_override_attrs_copies_dataarray_attrs(self):
+        da1 = DataArray([0, 1], dims="x", attrs={"meta": "left"})
+        da2 = DataArray([2, 3], dims="x", attrs={"meta": "right"})
+
+        merged = concat([da1, da2], dim="x", combine_attrs="override")
+        merged.attrs["meta"] = "merged"
+        merged.attrs["note"] = "mutated"
+
+        assert da1.attrs == {"meta": "left"}
 
 
 @pytest.mark.parametrize("attr1", ({"a": {"meta": [10, 20, 30]}}, {"a": [1, 2, 3]}, {}))

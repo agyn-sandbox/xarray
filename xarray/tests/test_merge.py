@@ -109,6 +109,26 @@ class TestMergeFunction:
             expected.attrs = expected_attrs
             assert actual.identical(expected)
 
+    def test_merge_override_attrs_copies_dataset_attrs(self):
+        ds1 = xr.Dataset({"a": ("x", [1, 2])}, attrs={"source": "left"})
+        ds2 = xr.Dataset({"b": ("x", [3, 4])}, attrs={"source": "right"})
+
+        merged = xr.merge([ds1, ds2], combine_attrs="override")
+        merged.attrs["source"] = "merged"
+        merged.attrs["note"] = "mutated"
+
+        assert ds1.attrs == {"source": "left"}
+
+    def test_merge_override_attrs_copies_dataarray_attrs(self):
+        da1 = xr.DataArray([1, 2], dims="x", name="a", attrs={"source": "left"})
+        da2 = xr.DataArray([3, 4], dims="x", name="b", attrs={"source": "right"})
+
+        merged = xr.merge([da1, da2], combine_attrs="override")
+        merged.attrs["source"] = "merged"
+        merged.attrs["note"] = "mutated"
+
+        assert da1.attrs == {"source": "left"}
+
     def test_merge_dicts_simple(self):
         actual = xr.merge([{"foo": 0}, {"bar": "one"}, {"baz": 3.5}])
         expected = xr.Dataset({"foo": 0, "bar": "one", "baz": 3.5})
