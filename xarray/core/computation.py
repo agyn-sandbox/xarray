@@ -1871,6 +1871,14 @@ def where(cond, x, y, keep_attrs=None):
             keep_attrs="override",
         )
         result.attrs = getattr(x, "attrs", {})
+
+        from .dataset import Dataset  # local import to avoid circular dependency
+
+        if isinstance(result, Dataset) and isinstance(x, Dataset):
+            for name, data_var in x.data_vars.items():
+                if name in result.data_vars:
+                    result[name].attrs = data_var.attrs.copy()
+
         return result
 
     # alignment for three arguments is complicated, so don't support it yet
