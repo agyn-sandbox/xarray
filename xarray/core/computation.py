@@ -1829,7 +1829,14 @@ def where(cond, x, y, keep_attrs=None):
     if keep_attrs is True:
         # keep the attributes of x, the second parameter, by default to
         # be consistent with the `where` method of `DataArray` and `Dataset`
-        keep_attrs = lambda attrs, context: attrs[1]
+        def _combine_where_attrs(variable_attrs, context=None):
+            for source in (x, y, cond):
+                source_attrs = getattr(source, "attrs", None)
+                if source_attrs is not None:
+                    return dict(source_attrs)
+            return {}
+
+        keep_attrs = _combine_where_attrs
 
     # alignment for three arguments is complicated, so don't support it yet
     return apply_ufunc(

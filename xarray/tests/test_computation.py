@@ -1929,6 +1929,49 @@ def test_where_attrs() -> None:
     assert_identical(expected, actual)
 
 
+def test_where_keep_attrs_scalar_second_arg_prefers_y() -> None:
+    cond = xr.DataArray([True, False], dims="x")
+    y = xr.DataArray([0, 2], dims="x", attrs={"attr": "y"})
+
+    actual = xr.where(cond, 1, y, keep_attrs=True)
+    expected = xr.DataArray([1, 2], dims="x", attrs={"attr": "y"})
+    assert_identical(expected, actual)
+
+
+def test_where_keep_attrs_prefers_x_over_scalar_y() -> None:
+    cond = xr.DataArray([True, False], dims="x")
+    x = xr.DataArray([1, 1], dims="x", attrs={"attr": "x"})
+
+    actual = xr.where(cond, x, 0, keep_attrs=True)
+    expected = xr.DataArray([1, 0], dims="x", attrs={"attr": "x"})
+    assert_identical(expected, actual)
+
+
+def test_where_keep_attrs_all_scalars_use_cond_attrs() -> None:
+    cond = xr.DataArray([True, False], dims="x", attrs={"attr": "cond"})
+
+    actual = xr.where(cond, 1, 0, keep_attrs=True)
+    expected = xr.DataArray([1, 0], dims="x", attrs={"attr": "cond"})
+    assert_identical(expected, actual)
+
+
+def test_where_keep_attrs_all_scalars_numpy_inputs() -> None:
+    cond = np.array([True, False])
+
+    actual = xr.where(cond, 1, 0, keep_attrs=True)
+    assert_array_equal(actual, np.array([1, 0]))
+
+
+def test_where_keep_attrs_false_drops_attrs() -> None:
+    cond = xr.DataArray([True, False], dims="x", attrs={"attr": "cond"})
+    x = xr.DataArray([1, 1], dims="x", attrs={"attr": "x"})
+    y = xr.DataArray([0, 0], dims="x", attrs={"attr": "y"})
+
+    actual = xr.where(cond, x, y, keep_attrs=False)
+    expected = xr.DataArray([1, 0], dims="x")
+    assert_identical(expected, actual)
+
+
 @pytest.mark.parametrize("use_dask", [True, False])
 @pytest.mark.parametrize("use_datetime", [True, False])
 def test_polyval(use_dask, use_datetime) -> None:
