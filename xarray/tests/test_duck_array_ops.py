@@ -616,6 +616,31 @@ def test_min_count_multi_axis_dtype_preserved():
     assert result.item() == values.sum()
 
 
+@requires_dask
+@pytest.mark.parametrize("dtype", [np.int64, np.bool_])
+def test_min_count_multi_axis_dask_promotes_non_na_capable(dtype):
+    values = np.arange(1, 7).reshape(2, 3).astype(dtype)
+    da = DataArray(values, dims=("dim_0", "dim_1")).chunk({"dim_0": 1, "dim_1": 3})
+
+    result = da.sum(dim=("dim_0", "dim_1"), skipna=True, min_count=1)
+
+    expected_dtype, _ = dtypes.maybe_promote(np.dtype(dtype))
+    assert result.dtype == expected_dtype
+    assert result.compute().item() == values.sum(dtype=np.int64)
+
+
+@requires_dask
+@pytest.mark.parametrize("dtype", [np.float64, np.complex128])
+def test_min_count_multi_axis_dask_preserves_na_capable(dtype):
+    values = np.arange(1, 7, dtype=np.float64).reshape(2, 3).astype(dtype)
+    da = DataArray(values, dims=("dim_0", "dim_1")).chunk({"dim_0": 1, "dim_1": 3})
+
+    result = da.sum(dim=("dim_0", "dim_1"), skipna=True, min_count=1)
+
+    assert result.dtype == np.dtype(dtype)
+    assert_allclose(result.compute(), values.sum())
+
+
 @pytest.mark.parametrize(
     "func, expectations",
     [

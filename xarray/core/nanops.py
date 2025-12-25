@@ -48,28 +48,70 @@ def _maybe_null_out(result, axis, mask, min_count=1):
 
     valid_count = total - nan_count
     null_mask = valid_count < min_count
-    keep_mask = np.logical_not(null_mask)
 
-    is_dask = isinstance(result, dask_array_type)
-    if not is_dask:
-        has_nulls = bool(np.any(null_mask)) if hasattr(null_mask, "any") else bool(null_mask)
-        if not has_nulls:
-            return result
+    if isinstance(null_mask, (bool, np.bool_)):
+        keep_mask = not null_mask
+    else:
+        keep_mask = np.logical_not(null_mask)
 
     result_dtype = getattr(result, "dtype", None)
     if result_dtype is None:
         result_dtype = np.asarray(result).dtype
 
-    dtype, fill_value = dtypes.maybe_promote(result_dtype)
+    is_dask = isinstance(result, dask_array_type)
+    result_ndim = getattr(result, "ndim", 0)
 
-    if is_dask or getattr(result, "ndim", 0) > 0:
-        result = result.astype(dtype, copy=False)
+    na_capable = (
+        np.issubdtype(result_dtype, np.floating)
+        or np.issubdtype(result_dtype, np.complexfloating)
+        or np.issubdtype(result_dtype, np.datetime64)
+        or np.issubdtype(result_dtype, np.timedelta64)
+        or result_dtype.kind == "O"
+    )
+
+    if na_capable:
+        if not is_dask:
+            has_nulls = (
+                null_mask
+                if isinstance(null_mask, (bool, np.bool_))
+                else bool(np.any(null_mask))
+            )
+            if not has_nulls:
+                return result
+
+        fill_value = dtypes.get_fill_value(result_dtype)
+
+        if not is_dask and result_ndim == 0:
+            keep_scalar = (
+                keep_mask
+                if isinstance(keep_mask, (bool, np.bool_))
+                else bool(keep_mask)
+            )
+            return result if keep_scalar else fill_value
+
         return where_method(result, keep_mask, fill_value)
 
-    if keep_mask:
-        return result
+    if not is_dask:
+        has_nulls = (
+            null_mask
+            if isinstance(null_mask, (bool, np.bool_))
+            else bool(np.any(null_mask))
+        )
+        if not has_nulls:
+            return result
 
-    return fill_value
+    dtype, fill_value = dtypes.maybe_promote(result_dtype)
+
+    if not is_dask and result_ndim == 0:
+        keep_scalar = (
+            keep_mask
+            if isinstance(keep_mask, (bool, np.bool_))
+            else bool(keep_mask)
+        )
+        return result if keep_scalar else fill_value
+
+    result = result.astype(dtype, copy=False)
+    return where_method(result, keep_mask, fill_value)
 
 
 def _nan_argminmax_object(func, fill_value, value, axis=None, **kwargs):
