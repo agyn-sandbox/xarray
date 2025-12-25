@@ -220,6 +220,18 @@ class InaccessibleVariableDataStore(backends.InMemoryDataStore):
 
 
 class TestDataset:
+    @staticmethod
+    def _multiindex_example() -> Dataset:
+        return Dataset(
+            data_vars={"v": (("x", "y"), np.ones((2, 3)))},
+            coords={
+                "x": ("x", [0, 1]),
+                "y": ("y", [0, 1, 2]),
+                "a": ("x", [10, 20]),
+                "b": ("x", [100, 200]),
+            },
+        )
+
     def test_repr(self) -> None:
         data = create_test_data(seed=123)
         data.attrs["foo"] = "bar"
@@ -2125,6 +2137,59 @@ class TestDataset:
 
         assert_identical(expected, actual)
         assert actual.x.dtype == expected.x.dtype
+
+    def test_data_vars_len_never_negative_after_reset_index_drop(self) -> None:
+        base = self._multiindex_example()
+        result = base.set_index(x=["a", "b"]).reset_index("x", drop=True)
+
+        assert len(result.data_vars) == 1
+        assert list(result.data_vars) == ["v"]
+        assert "*empty*" not in repr(result)
+
+    def test_data_vars_len_after_reset_index_level_drop(self) -> None:
+        base = self._multiindex_example()
+        result = base.set_index(x=["a", "b"]).reset_index("a", drop=True)
+
+        assert len(result.data_vars) == 1
+        assert list(result.data_vars) == ["v"]
+        assert "*empty*" not in repr(result)
+
+    def test_data_vars_len_after_set_index_append_and_reset(self) -> None:
+        base = self._multiindex_example()
+        result = base.set_index(x=["a", "b"], append=True).reset_index("a", drop=True)
+
+        assert len(result.data_vars) == 1
+        assert list(result.data_vars) == ["v"]
+        assert "*empty*" not in repr(result)
+
+    def test_invariant_coord_names_subset_of_variables(self) -> None:
+        base = self._multiindex_example()
+        variants = [
+            base.set_index(x=["a", "b"]).reset_index("x", drop=True),
+            base.set_index(x=["a", "b"]).reset_index("a", drop=True),
+            base.set_index(x=["a", "b"], append=True).reset_index("a", drop=True),
+            base.set_index(x=["a", "b"]).reset_index("x", drop=True).reindex(
+                x=[0, 1], y=[0, 1, 2]
+            ),
+        ]
+
+        for ds in variants:
+            assert set(ds._coord_names) <= set(ds._variables)
+
+    def test_iter_data_vars_matches_len_and_keys(self) -> None:
+        base = self._multiindex_example()
+        reindexed = (
+            base.set_index(x=["a", "b"]).reset_index("x", drop=True).reindex(
+                x=[0, 1], y=[0, 1, 2]
+            )
+        )
+
+        iter_keys = list(reindexed.data_vars)
+        mapping_keys = list(reindexed.data_vars.keys())
+
+        assert len(reindexed.data_vars) == 1
+        assert iter_keys == ["v"]
+        assert iter_keys == mapping_keys
 
     @pytest.mark.parametrize("fill_value", [dtypes.NA, 2, 2.0, {"foo": 2, "bar": 1}])
     def test_align_fill_value(self, fill_value) -> None:
