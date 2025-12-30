@@ -1727,7 +1727,7 @@ def dot(*arrays, dims=None, **kwargs):
     return result.transpose(*all_dims, missing_dims="ignore")
 
 
-def where(cond, x, y):
+def where(cond, x, y, *, keep_attrs: bool = None):
     """Return elements from `x` or `y` depending on `cond`.
 
     Performs xarray-like broadcasting across input arguments.
@@ -1743,6 +1743,9 @@ def where(cond, x, y):
         values to choose from where `cond` is True
     y : scalar, array, Variable, DataArray or Dataset
         values to choose from where `cond` is False
+    keep_attrs : bool, optional
+        If ``True``, copy attributes from the first argument to the result.
+        If ``False``, drop attributes. Defaults to ``OPTIONS["keep_attrs"]``.
 
     Returns
     -------
@@ -1808,8 +1811,12 @@ def where(cond, x, y):
     Dataset.where, DataArray.where :
         equivalent methods
     """
+    resolved_keep_attrs = keep_attrs
+    if resolved_keep_attrs is None:
+        resolved_keep_attrs = _get_keep_attrs(default=False)
+
     # alignment for three arguments is complicated, so don't support it yet
-    return apply_ufunc(
+    result = apply_ufunc(
         duck_array_ops.where,
         cond,
         x,
@@ -1817,7 +1824,29 @@ def where(cond, x, y):
         join="exact",
         dataset_join="exact",
         dask="allowed",
+        keep_attrs=resolved_keep_attrs,
     )
+
+    if resolved_keep_attrs and hasattr(result, "data_vars"):
+        source_data_vars = None
+        for candidate in (x, y):
+            if hasattr(candidate, "data_vars"):
+                source_data_vars = candidate.data_vars
+                break
+            if is_dict_like(candidate):
+                source_data_vars = candidate
+                break
+
+        if source_data_vars is not None:
+            for name in result.data_vars:
+                try:
+                    source_var = source_data_vars[name]
+                except KeyError:
+                    source_var = None
+                if source_var is not None:
+                    result[name].attrs = dict(getattr(source_var, "attrs", {}))
+
+    return result
 
 
 def polyval(coord, coeffs, degree_dim="degree"):
